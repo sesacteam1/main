@@ -4,10 +4,9 @@ def crawl_jobkorea(url):
     """잡코리아 채용 공고 페이지에서 전체 텍스트를 크롤링합니다."""
     try:
         response = requests.get(url)
-        response.raise_for_status()  # HTTP 오류 발생 시 예외 발생
-
+        response.raise_for_status() 
         soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text(separator='\n', strip=True) # 모든 텍스트 추출 및 줄바꿈으로 분리
+        text = soup.get_text(separator='\n', strip=True)
         return text
     except requests.exceptions.RequestException as e:
         print(f"오류 발생: {e}")
