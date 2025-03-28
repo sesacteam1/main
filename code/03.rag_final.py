@@ -129,13 +129,13 @@ def classify_question(question):
     
     채용 공고 형식은 다음과 같은 형식을 의미합니다.
     [채용 공고 형식]
-        - 공고 제목: (공고제목)
-        - 공고 링크: (공고링크를 그대로 제공하세요)
-        - 기업명:(기업명)
-        - 태그:(태그)
-        - 주요 업무: (주요 업무에 대한 설명)
-        - 자격 요건: (필수 자격 요건)
-        - 경력: (경력)
+    공고 제목: (공고제목)
+    공고 링크: (공고링크를 그대로 제공하세요)
+    기업명:(기업명)
+    태그:(태그)
+    주요 업무: (주요 업무에 대한 설명)
+    자격 요건: (필수 자격 요건)
+    경력: (경력)
     
     **출력 형식 (JSON)**
     {"category": "채용 정보"}
@@ -254,52 +254,54 @@ def format_chat_history(chat_history):
         return [(entry["role"], entry["content"]) for entry in chat_history]
     return chat_history  # 이미 올바른 형식이면 그대로 반환
 
-def get_answer_with_similarity_check(question, vector_store, chat_history,category):
-    """채용 정보를 검색하여 응답을 생성하며, 유사도 확인"""
+
+def get_answer_with_similarity_check(question, vector_store, chat_history, category):
+    """채용 정보를 검색하여 응답을 생성하며, 유사도 0.7 이상인 문서만 사용"""
     
     formatted_chat_history = format_chat_history(chat_history)
-    
     retriever = vector_store.as_retriever()
+    
     print(retriever.vectorstore.index.metric_type)
     
-    # 1️⃣ 전체 대화 기록을 포함한 질문 생성
+    # 1️⃣ 질문과 대화 기록을 포함한 질문 생성
     combined_question = question + " " + " ".join(
-    [entry["question"] + " " + entry["answer"] if isinstance(entry, dict) else entry[0] + " " + entry[1] for entry in chat_history]
-)
+        [entry["question"] + " " + entry["answer"] for entry in chat_history[-3:]]
+    )
 
-    # 유사도 검사 (최대 3개의 문서 검색)
-    docs_with_scores = retriever.vectorstore.similarity_search_with_score(combined_question, k=3)
+    # 2️⃣ 유사도 검사 (최대 5개 문서 검색)
+    docs_with_scores = retriever.vectorstore.similarity_search_with_score(combined_question, k=5)
     
-    # 가장 높은 유사도를 가진 문서 찾기
-    if not docs_with_scores:
-        logging.warning("❌ 관련 문서를 찾지 못했습니다.")
+    # 3️⃣ 유사도 0.7 이상인 문서만 필터링
+    filtered_docs = [doc for doc, score in docs_with_scores if score >= 0.7]
+    
+    # ✅ 필터링된 문서 로그 출력
+    logging.info(f"✅ 0.7 이상인 문서 개수: {len(filtered_docs)}")
+    
+    if not filtered_docs:
+        logging.warning("❌ 유사도 0.7 이상인 문서를 찾지 못했습니다.")
         return "⚠ 관련된 채용 정보를 찾지 못했습니다. 좀 더 구체적으로 질문해 주세요.", []
 
-    highest_score = max(score for _, score in docs_with_scores)
-    logging.info(f'✅유사도 최고 점수: {highest_score}')
+    # 4️⃣ 필터링된 문서만 context로 사용하여 답변 생성
+    if category == '채용 정보':
+        retrieval_chain = create_chatbot_for_job(vector_store)
+    else:
+        retrieval_chain = create_chatbot_for_normal(vector_store)
 
-    # ✅ 유사도가 0.3 이상이면 문서를 기반으로 응답 생성
-    if highest_score >= 0.7:
-        retrieval_chain = create_chatbot_for_job(vector_store) if category == '채용 정보' else create_chatbot_for_normal(vector_store)
-        result = retrieval_chain.invoke({
-            "question": question, 
-            "chat_history": formatted_chat_history  # ✅ 기존 대화 기록 추가
-        })
-        answer = result.get("answer", "")
-
-        # ✅ 대화 기록 업데이트
-        chat_history.append({"role": "user", "content": question})
-        chat_history.append({"role": "assistant", "content": answer})
-        
-        
-        # 대화 기록 로그 출력
-        logging.info(f"Updated chat_history: {chat_history}")
-
-        return answer, result.get("source_documents", [])
+    result = retrieval_chain.invoke({
+        "question": question,
+        "chat_history": formatted_chat_history,
+        "context": "\n\n".join([doc.page_content for doc in filtered_docs])  # 0.7 이상 문서만 context로 전달
+    })
     
-    # ❌ 유사도가 낮을 경우 다시 질문을 유도
-    logging.warning("❌ 유사도가 낮아 문서를 참조하지 않습니다.")
-    return "⚠ 현재 질문과 관련된 채용 정보를 찾을 수 없습니다. 조금 더 상세히 질문해 주세요!", []
+    answer = result.get("answer", "")
+
+    # ✅ 대화 기록 업데이트
+    chat_history.append({"question": question, "answer": answer})
+    print('현재 반영된 chat_history:', chat_history)
+    logging.info(f"Updated chat_history: {chat_history}")
+
+    return answer, filtered_docs
+
 
 
 
