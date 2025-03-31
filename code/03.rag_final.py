@@ -125,7 +125,9 @@ def classify_question(question):
 
     system_prompt = """
     당신은 사용자의 질문을 적절한 카테고리로 분류하는 AI입니다.
-    질문을 1.채용 공고 형식이 필요한 질문(=채용정보)과 2.채용 공고 형식이 필요하지 않은 질문(=일반질문), 총 두가지로 분류하세요.
+    질문을 총 두가지로 분류하세요.
+    1.채용 공고 형식이 필요한 질문(=채용정보)
+    2.채용 공고 형식이 필요하지 않은 질문(=일반질문)
     
     채용 공고 형식은 다음과 같은 형식을 의미합니다.
     [채용 공고 형식]
@@ -265,7 +267,7 @@ def get_answer_with_similarity_check(question, vector_store, chat_history, categ
     
     # 1️⃣ 질문과 대화 기록을 포함한 질문 생성
     combined_question = question + " " + " ".join(
-        [entry["question"] + " " + entry["answer"] for entry in chat_history[-3:]]
+        [entry[0] + " " + entry[1] for entry in chat_history]
     )
 
     # 2️⃣ 유사도 검사 (최대 5개 문서 검색)
@@ -368,7 +370,7 @@ for message in st.session_state.messages:
 if 'conversation_history' not in st.session_state:
     st.session_state.conversation_history = []
 
-if 'chat_history' not in st.session_state:  # 🚀 chat_history를 session_state에서 관리
+if 'chat_history' not in st.session_state: 
     st.session_state.chat_history = []
 
 # 사용자 입력 받기
